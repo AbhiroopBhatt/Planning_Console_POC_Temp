@@ -1,0 +1,7 @@
+brand_id,brand_name,parent_brand_id
+1,FreshCo,
+2,NatureBurst,
+3,FreshCo Classic,1
+4,FreshCo Premium,1
+5,NatureBurst Select,2
+6,NatureBurst Daily,2

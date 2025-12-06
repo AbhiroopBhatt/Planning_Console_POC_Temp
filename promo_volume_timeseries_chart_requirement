@@ -1,0 +1,94 @@
+User wants to view a time series chart on the Fact Promotion detail page (localhost:3000/plan/fact/*) to visualize the variation of base volume and promo volume against dates.
+
+REQUIREMENTS:
+
+1. CHART LOCATION:
+   - The time series chart should be placed after the Summary table (Summary Card section) on the Fact Promotion detail page
+   - The chart should be displayed in a dedicated section with proper styling consistent with the page design
+
+2. CHART DATA:
+   - X-axis: Dates (from the promotion's date range)
+   - Y-axis: Volume values
+   - Display two data series:
+     * Base Volume (base_volume_snapshot from Fact_Promotions)
+     * Promo Volume (promo_volume_estimate from Fact_Promotions)
+   - Both series should be clearly distinguished using different colors/styles
+
+3. AGGREGATION LEVEL TOGGLE:
+   - Provide ability to view chart at two aggregation levels:
+     a) Aggregated Level (All Products): 
+        - Sum base_volume_snapshot and promo_volume_estimate across all products for each date
+        - This is the default view
+     b) Individual Products:
+        - Allow user to select a specific product (via dropdown/selector)
+        - Show base volume and promo volume for the selected product only
+        - Display product name (sku_name) when individual product is selected
+
+4. TIME AGGREGATION TOGGLE:
+   - Provide ability to toggle between three time aggregation levels:
+     a) Daily: Show data point for each date (default)
+     b) Weekly: Aggregate volumes by week (sum volumes for all dates within each week)
+        - Week should be defined as Monday-Sunday or Sunday-Saturday
+        - Display week range (e.g., "Jan 1-7, 2024") on x-axis
+     c) Monthly: Aggregate volumes by month (sum volumes for all dates within each month)
+        - Display month name and year (e.g., "January 2024") on x-axis
+
+5. DATA PROCESSING:
+   - For aggregated (all products) view:
+     * Group records by date/time period
+     * Sum base_volume_snapshot across all products for each time period
+     * Sum promo_volume_estimate across all products for each time period
+   - For individual product view:
+     * Filter records by selected product_id
+     * Group by date/time period
+     * Sum base_volume_snapshot for the selected product across all customer/region/channel combinations for each time period
+     * Sum promo_volume_estimate for the selected product across all customer/region/channel combinations for each time period
+   - Handle null values appropriately (treat as 0 for aggregation)
+
+6. UI COMPONENTS:
+   - Product Selection Control:
+     * Radio buttons or dropdown to select "All Products" or "Individual Product"
+     * When "Individual Product" is selected, show a dropdown listing all unique products (sku_name) from the promotion records
+     * Default to "All Products"
+   - Time Aggregation Control:
+     * Radio buttons or toggle buttons for "Daily", "Weekly", "Monthly"
+     * Default to "Daily"
+     * Show selected aggregation level clearly
+
+7. CHART LIBRARY:
+   - Use Recharts library (already available in package.json)
+   - Chart type: Line chart or Area chart
+   - Features:
+     * Interactive tooltip showing exact values for both series on hover
+     * Legend to distinguish between Base Volume and Promo Volume
+     * Responsive design that works on different screen sizes
+     * Proper date formatting on x-axis
+     * Grid lines for better readability
+
+8. DATA SOURCE:
+   - Chart data should be derived from the existing API response at /api/promotions/fact/:id
+   - Process the records array client-side to create chart data points
+   - No additional API endpoint required initially (can be optimized later if needed)
+
+9. STYLING:
+   - Match the existing design system (dark mode support, consistent colors)
+   - Chart container should have:
+     * White/dark background matching page theme
+     * Rounded corners and border consistent with other cards
+     * Proper padding and spacing
+   - Chart colors should be:
+     * Distinct colors for Base Volume and Promo Volume (e.g., blue for base, green for promo)
+     * Accessible color contrast
+
+10. PERFORMANCE:
+    - Chart should handle large datasets efficiently
+    - Use useMemo for data processing to avoid unnecessary recalculations
+    - Only recalculate chart data when:
+      * Records data changes
+      * Product selection changes
+      * Time aggregation level changes
+
+11. ERROR HANDLING:
+    - If no data available, show appropriate message
+    - Handle edge cases (empty date ranges, no volumes, etc.)
+    - Show loading state if data is being fetched

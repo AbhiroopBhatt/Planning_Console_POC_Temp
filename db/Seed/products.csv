@@ -1,0 +1,11 @@
+product_id,barcode,sku_name,description,net_weight,pack_size,category_id,brand_id
+1,8901000001001,Orange Juice 1L,FreshCo classic orange juice 1 litre,1,1L,3,3
+2,8901000001002,Apple Juice 1L,FreshCo premium apple juice 1 litre,1,1L,3,4
+3,8901000001003,Mixed Fruit Juice 1L,NatureBurst select mixed fruit juice,1,1L,3,5
+4,8901000001004,Mango Energy Drink 500ml,FreshCo premium mango-flavour energy drink,0.5,500ml,4,4
+5,8901000001005,Lemon Energy Drink 250ml,NatureBurst daily lemon energy drink,0.25,250ml,4,6
+6,8901000001006,Potato Chips 200g,FreshCo classic salted potato chips,0.2,200g,5,3
+7,8901000001007,Tomato Chips 150g,NatureBurst select tomato-flavoured chips,0.15,150g,5,5
+8,8901000001008,Masala Chips 200g,NatureBurst daily spicy masala chips,0.2,200g,5,6
+9,8901000001009,Roasted Almonds 100g,FreshCo premium roasted almonds,0.1,100g,6,4
+10,8901000001010,Mixed Nuts 150g,NatureBurst select mixed nuts pouch,0.15,150g,6,5

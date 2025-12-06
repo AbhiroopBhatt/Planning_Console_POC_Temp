@@ -1,0 +1,269 @@
+# Promotion Edit Functionality - Functional Requirements
+
+## Overview
+Provide the ability to edit existing promotions, allowing users to modify the scope (products, customers, regions, channels, dates) and discount percentage both at aggregated levels and at individual line level.
+
+## User Story
+As a user, I want to edit existing promotions so that I can adjust the promotion scope, dates, discount, or individual line items as business requirements change.
+
+## Functional Requirements
+
+### 1. Edit Modes
+
+#### 1.1 Aggregated Edit Mode
+- Users can edit promotions by modifying scope selections at a high level (similar to the create promotion page)
+- Changes are applied to all records in the promotion group
+- Scope modifications include:
+  - Adding/removing products (via category/brand filters or direct product selection)
+  - Adding/removing customers (via hierarchy selection)
+  - Adding/removing regions (via hierarchy selection)
+  - Adding/removing channels
+  - Modifying date range (start date and end date)
+  - Changing discount percentage (applies to all records)
+
+#### 1.2 Line-Level Edit Mode
+- Users can edit individual promotion records directly in the table
+- Editable fields per line:
+  - Product (can change to different product)
+  - Customer (can change to different customer)
+  - Region (can change to different region)
+  - Channel (can change to different channel)
+  - Date (can change to different date within valid Time_M range)
+  - Discount percentage (individual to that line)
+  - Base volume snapshot (if needed for corrections)
+  - Promo volume estimate (if needed for corrections)
+
+### 2. UI Requirements
+
+#### 2.1 Edit Button and Mode Toggle
+- Add an "Edit Promotion" button on the promotion detail page (`/plan/fact/[id]`)
+- When clicked, toggle between "View Mode" and "Edit Mode"
+- In Edit Mode, provide two sub-modes:
+  - **Scope Edit Mode**: Show scope selection interface (similar to create page)
+  - **Line Edit Mode**: Enable inline editing in the records table
+
+#### 2.2 Scope Edit Mode UI
+- Display current scope selections:
+  - Current products (with counts)
+  - Current customers (with counts)
+  - Current regions (with counts)
+  - Current channels (with counts)
+  - Current date range
+  - Current discount percentage
+- Allow users to modify each scope dimension using the same hierarchy/browser interfaces as the create page
+- Show summary of changes:
+  - New products to be added
+  - Products to be removed
+  - New customers/regions/channels to be added
+  - Customers/regions/channels to be removed
+  - New date range
+  - Records that will be added
+  - Records that will be removed
+- Provide "Preview Changes" button to show what will change before saving
+- Provide "Save Changes" and "Cancel" buttons
+
+#### 2.3 Line Edit Mode UI
+- Enable inline editing on the existing records table
+- Add edit icon/button to each row (or enable row click to edit)
+- When editing a row:
+  - Make fields editable (dropdowns for products/customers/regions/channels/dates, input for discount)
+  - Show "Save" and "Cancel" buttons for that row
+- Support bulk selection and deletion of lines
+- Allow adding new lines manually (opens a form/dialog)
+
+### 3. Backend Requirements
+
+#### 3.1 API Endpoint: Update Promotion Scope
+**Endpoint**: `PUT /api/promotions/fact/:id/scope`
+
+**Request Body**:
+```json
+{
+  "productIds": [1, 2, 3],
+  "customerIds": [1, 2],
+  "regionIds": [1],
+  "channelIds": [1, 2],
+  "startDate": "2025-01-01",
+  "endDate": "2025-01-15",
+  "discountPct": 25.0
+}
+```
+
+**Logic**:
+1. Find the promotion group using the promo_id (same logic as `getFactPromotionById`)
+2. Identify current records in the promotion
+3. Calculate the new set of combinations based on updated scope
+4. Compare old vs new combinations:
+   - Records to add: new combinations not in current set
+   - Records to update: existing records that match new combinations (for discount changes)
+   - Records to delete: current records not in new set
+5. For records to add:
+   - Fetch snapshots (base_price, cogs, logs, base_volume) from DuckDB views
+   - Calculate promo_price_calculated = base_price * (1 - discountPct / 100)
+   - Estimate promo_volume using ML model
+   - Calculate incremental metrics
+   - Insert new records
+6. For records to update:
+   - Update discount_pct and promo_price_calculated
+   - Re-estimate promo_volume if discount changed
+   - Recalculate incremental metrics
+   - Update existing records
+7. For records to delete:
+   - Delete records that no longer match the new scope
+8. Execute all changes in a transaction (ROLLBACK on any error)
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "promo_id": 551,
+    "records_added": 50,
+    "records_updated": 100,
+    "records_deleted": 25,
+    "message": "Promotion updated successfully"
+  }
+}
+```
+
+#### 3.2 API Endpoint: Update Individual Promotion Line
+**Endpoint**: `PUT /api/promotions/fact/:id/line/:lineId`
+
+**Request Body**:
+```json
+{
+  "product_id": 5,
+  "customer_id": 3,
+  "region_id": 2,
+  "channel_id": 1,
+  "time_id": 123,
+  "discount_pct": 30.0,
+  "base_volume_snapshot": 1000.0,
+  "promo_volume_estimate": 1500.0
+}
+```
+
+**Logic**:
+1. Verify the line belongs to the promotion group
+2. If product_id or customer_id changed, fetch new snapshots
+3. If discount_pct changed, recalculate promo_price_calculated
+4. If base_volume_snapshot or promo_volume_estimate changed, recalculate incremental metrics
+5. Update the record
+6. Return updated record
+
+#### 3.3 API Endpoint: Delete Promotion Lines
+**Endpoint**: `DELETE /api/promotions/fact/:id/lines`
+
+**Request Body**:
+```json
+{
+  "promo_ids": [551, 552, 553]
+}
+```
+
+**Logic**:
+1. Verify all promo_ids belong to the promotion group
+2. Delete the specified records
+3. Return success confirmation
+
+#### 3.4 API Endpoint: Add New Promotion Lines
+**Endpoint**: `POST /api/promotions/fact/:id/lines`
+
+**Request Body**:
+```json
+{
+  "lines": [
+    {
+      "product_id": 5,
+      "customer_id": 3,
+      "region_id": 2,
+      "channel_id": 1,
+      "time_id": 123,
+      "discount_pct": 30.0
+    }
+  ]
+}
+```
+
+**Logic**:
+1. For each line:
+   - Verify it doesn't already exist (same product, customer, region, channel, time combination)
+   - Fetch snapshots
+   - Calculate promo_price_calculated
+   - Estimate promo_volume using ML model
+   - Calculate incremental metrics
+   - Insert record with promo_id in the promotion group range
+2. Return created records
+
+### 4. Data Integrity Requirements
+
+#### 4.1 Promotion Grouping
+- Maintain the concept of promotion groups (consecutive promo_ids with same discount_pct)
+- When scope changes, new records should be inserted with promo_ids that belong to the same group
+- When discount changes, all records in the group should be updated
+
+#### 4.2 Snapshot Consistency
+- When product or customer changes for a line, re-fetch snapshots from DuckDB views
+- Preserve original snapshots for historical records unless explicitly updated
+
+#### 4.3 Volume Re-estimation
+- If discount percentage changes, automatically re-estimate promo_volume using the active ML model
+- Recalculate all incremental metrics (volume, revenue, margin)
+
+### 5. Validation Requirements
+
+#### 5.1 Scope Validation
+- At least one product must be selected
+- At least one customer must be selected
+- At least one region must be selected
+- At least one channel must be selected
+- Start date must be before end date
+- Date range must have corresponding time_ids in Time_M table
+- Discount percentage must be between 0 and 100
+
+#### 5.2 Line-Level Validation
+- Product, customer, region, channel, and time must exist in respective master tables
+- Discount percentage must be between 0 and 100
+- Cannot create duplicate combinations (same product, customer, region, channel, time)
+
+### 6. Error Handling
+
+#### 6.1 Transaction Rollback
+- All database changes must be within a transaction
+- If any operation fails, rollback all changes and return error message
+
+#### 6.2 User Feedback
+- Show clear error messages for validation failures
+- Display success messages with summary of changes
+- Provide loading indicators during save operations
+
+### 7. Edge Cases
+
+#### 7.1 Empty Promotion
+- Prevent deletion of all records in a promotion (promotion should have at least one record)
+- If user attempts to remove all scope, show warning and prevent save
+
+#### 7.2 Date Range Changes
+- When extending date range, add new time records for new dates
+- When reducing date range, delete records outside new range
+- When moving date range, delete old date records and add new date records
+
+#### 7.3 Discount Percentage Changes
+- When changing discount for all records, update promo_price_calculated and re-estimate volumes
+- When changing discount for single line, update only that line
+
+### 8. Performance Considerations
+
+#### 8.1 Bulk Operations
+- Batch database inserts/updates/deletes for efficiency
+- Use transaction to ensure atomicity
+
+#### 8.2 Snapshot Fetching
+- Cache snapshots for same product-customer combinations within the same edit operation
+- Use Promise.all for parallel snapshot fetching where possible
+
+### 9. Future Enhancements (Out of Scope for Initial Implementation)
+- Undo/redo functionality
+- Change history/audit trail
+- Batch import/export of promotion lines
+- Clone promotion functionality

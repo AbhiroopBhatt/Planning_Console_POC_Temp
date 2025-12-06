@@ -1,0 +1,76 @@
+User wants to view and update volumes for created promotions in the Plan page.
+
+REQUIREMENTS:
+
+1. VIEW PROMOTIONS IN PLAN PAGE:
+   - The Plan page (http://localhost:3000/plan) should display all promotions created in Fact_Promotions table
+   - Each promotion should show:
+     - promo_id (first promo_id of the promotion group)
+     - Summary information:
+       * Date range (start date to end date) - derived from time_id range
+       * Number of records/lines in the promotion
+       * Scope summary (number of products, customers, regions, channels)
+       * Discount percentage
+     - Status indicator (e.g., "Draft", "Active", "Completed")
+   - Promotions should be displayed in a list/grid format with ability to click to view details
+
+2. PROMOTION DETAIL PAGE:
+   - When user clicks on a promotion, navigate to a detail page (e.g., /plan/[promo_id])
+   - Display all records for that promotion (all records with the same promo_id)
+   - Show a table with columns:
+     * product_id, product_name (sku_name)
+     * customer_id, customer_name
+     * region_id, region_name
+     * channel_id, channel_name
+     * date (from time_id)
+     * discount_pct
+     * promo_price_calculated
+     * cogs_snapshot
+     * logs_snapshot
+     * base_price_snapshot
+     * base_volume_snapshot (editable)
+     * promo_volume_estimate (editable)
+     * incremental_volume (calculated, read-only)
+     * incremental_revenue (calculated, read-only)
+     * incremental_margin (calculated, read-only)
+
+3. VOLUME ENTRY/UPDATE:
+   - User should be able to:
+     * Enter or update base_volume_snapshot for each record
+     * Enter or update promo_volume_estimate for each record
+   - Volumes can be entered:
+     * Individually for each record (row-level editing)
+     * In bulk for multiple records (e.g., select multiple rows and set same value)
+     * By aggregation level (e.g., set volume for all records of a product, customer, region, channel, or date)
+
+4. CALCULATED FIELDS (Auto-calculated on volume update):
+   - incremental_volume = promo_volume_estimate - base_volume_snapshot
+   - incremental_revenue = (promo_volume_estimate * promo_price_calculated) - (base_volume_snapshot * base_price_snapshot)
+   - incremental_margin = Margin at Promo - Margin at Base
+     where:
+     * Margin at Promo = promo_volume_estimate * (promo_price_calculated - (cogs_snapshot + logs_snapshot))
+     * Margin at Base = base_volume_snapshot * (base_price_snapshot - (cogs_snapshot + logs_snapshot))
+
+5. DATA PERSISTENCE:
+   - When user updates volumes, save to Fact_Promotions table in PostgreSQL
+   - Update should be done via API endpoint (e.g., PUT /api/promotions/fact/:promo_id/volumes)
+   - Update can be:
+     * Single record update (update one row)
+     * Bulk update (update multiple rows in a transaction)
+
+6. UI/UX REQUIREMENTS:
+   - Editable fields should be clearly indicated (e.g., input fields with borders)
+   - Calculated fields should be read-only and visually distinct (e.g., grayed out or with different background)
+   - Show validation errors if volumes are negative or invalid
+   - Provide save/cancel buttons for bulk edits
+   - Show loading states during save operations
+   - Display success/error messages after save
+
+7. AGGREGATION VIEWS:
+   - Optionally show summary statistics:
+     * Total incremental volume across all records
+     * Total incremental revenue across all records
+     * Total incremental margin across all records
+     * Average volumes, prices, margins
+   - Group by dimensions (product, customer, region, channel, date) for analysis
+

@@ -1,0 +1,154 @@
+User wants the ability to re-estimate promo volumes for existing promotions using the current active ML model.
+
+REQUIREMENTS:
+
+1. PURPOSE:
+   - Allow users to re-run ML volume estimation for existing promotions
+   - Useful when:
+     * ML model coefficients have been updated/retrained
+     * Base volumes have been updated and promo volumes need recalculation
+     * User wants to refresh estimates after model improvements
+     * Testing different model versions
+
+2. FUNCTIONAL REQUIREMENTS:
+
+   2.1. RE-ESTIMATION TRIGGER:
+   - Provide a button/action on the promotion detail page (/plan/fact/[id])
+   - Button should be clearly labeled (e.g., "Re-estimate Volumes" or "Refresh ML Estimates")
+   - Button should be placed in a prominent location (e.g., near the summary section or header)
+   
+   2.2. SCOPE OF RE-ESTIMATION:
+   - Re-estimate promo_volume_estimate for all records in the selected promotion
+   - Use the currently active ML model (same model used during creation)
+   - Use current base_volume_snapshot values (do not fetch new base volumes)
+   - Use existing product, customer, category, brand, and discount_pct values
+   - Only update records that have non-null base_volume_snapshot
+   - Skip records with null base_volume_snapshot (cannot estimate without base volume)
+
+   2.3. RE-CALCULATION:
+   - After re-estimating promo_volume_estimate, automatically recalculate:
+     * incremental_volume = promo_volume_estimate - base_volume_snapshot
+     * incremental_revenue = (promo_volume_estimate * promo_price_calculated) - (base_volume_snapshot * base_price_snapshot)
+     * incremental_margin = Margin at Promo - Margin at Base
+       where:
+       * Margin at Promo = promo_volume_estimate * (promo_price_calculated - (cogs_snapshot + logs_snapshot))
+       * Margin at Base = base_volume_snapshot * (base_price_snapshot - (cogs_snapshot + logs_snapshot))
+   - All calculations should use current snapshot values (prices, costs)
+
+   2.4. PROCESSING:
+   - Process all records in a single transaction
+   - If any record fails estimation, log the error but continue with other records
+   - Return summary of results (successful, failed, skipped)
+
+3. API ENDPOINT:
+
+   3.1. Endpoint:
+   - POST /api/promotions/fact/:id/reestimate
+   - Parameters:
+     * :id - The promo_id (first promo_id of the promotion group)
+   
+   3.2. Request Body:
+   - Optional: Can include model_id to use a specific model version (defaults to active model)
+   - Optional: Can include flags for selective re-estimation (e.g., only records with null promo volumes)
+
+   3.3. Response:
+   - Success response:
+     {
+       "success": true,
+       "data": {
+         "promo_id": 626,
+         "records_processed": 106,
+         "records_updated": 100,
+         "records_skipped": 6,  // null base volumes
+         "records_failed": 0,
+         "model_used": "VolumeMultiplierModel v1.0"
+       }
+     }
+   - Error response with appropriate HTTP status codes
+
+4. BACKEND IMPLEMENTATION:
+
+   4.1. Controller Method:
+   - Create reestimateVolumes method in promotionsController
+   - Steps:
+     a) Identify promotion group using promo_id
+     b) Get all records in the promotion group
+     c) Get active ML model (or specified model)
+     d) For each record:
+        * Check if base_volume_snapshot is not null
+        * Get product info (category_id, brand_id)
+        * Call mlService.estimatePromoVolume()
+        * Update promo_volume_estimate, incremental_volume, incremental_revenue, incremental_margin
+     e) Commit transaction
+     f) Return summary
+
+   4.2. Error Handling:
+   - If no active model found, return error
+   - If promotion not found, return 404
+   - Log individual record failures but don't fail entire operation
+   - Return partial success if some records fail
+
+   4.3. Logging:
+   - Log re-estimation requests
+   - Log model version used
+   - Log number of records updated
+   - Log any errors encountered
+
+5. UI IMPLEMENTATION:
+
+   5.1. Button Placement:
+   - Add "Re-estimate Volumes" button on the fact promotion detail page
+   - Place near the header or summary section for visibility
+   - Button should have appropriate icon (e.g., Refresh, Calculator, or AI/ML icon)
+
+   5.2. User Interaction:
+   - Show confirmation dialog before re-estimation (since it will overwrite existing estimates)
+     * Message: "This will re-estimate promo volumes for all records in this promotion using the active ML model. Existing estimates will be overwritten. Continue?"
+   - Show loading state while processing
+   - Disable button during processing
+   - Show success/error message after completion
+
+   5.3. Results Display:
+   - After successful re-estimation:
+     * Show toast/notification with summary
+     * Refresh the data to show updated values
+     * Highlight any records that were skipped or failed
+   - Show error message if re-estimation fails
+
+   5.4. Visual Feedback:
+   - Button styling should indicate it's an action button
+   - Consider adding a tooltip explaining what re-estimation does
+   - Show progress indicator if processing many records
+
+6. EDGE CASES:
+
+   6.1. No Active Model:
+   - Show error message to user
+   - Disable re-estimate button if no active model exists
+
+   6.2. Null Base Volumes:
+   - Skip records with null base_volume_snapshot
+   - Report in summary how many were skipped
+
+   6.3. Missing Product Info:
+   - If category_id or brand_id is missing, use 0 as multiplier (default behavior)
+   - Log warning but don't fail
+
+   6.4. Large Promotions:
+   - Optimize for promotions with many records
+   - Consider batch processing for very large promotions
+   - Show progress for long-running operations
+
+7. PERMISSIONS (Future Consideration):
+   - May want to restrict re-estimation to certain user roles
+   - For now, any user who can view the promotion can re-estimate
+
+8. AUDIT TRAIL (Future Enhancement):
+   - Could track when re-estimations were performed
+   - Store previous estimates before overwriting
+   - Track which model version was used for each estimation
+
+9. RELATED FEATURES:
+   - This complements the existing manual volume update feature
+   - Re-estimation will overwrite manual edits, so consider warning users
+   - Could add option to only re-estimate records with null promo volumes (preserve manual edits)

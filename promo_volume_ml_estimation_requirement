@@ -1,0 +1,123 @@
+User wants to implement an ML-based model to automatically estimate promo volumes when a promotion is created.
+
+REQUIREMENTS:
+
+1. MODEL PURPOSE:
+   - When a promotion is created, automatically run an ML model to estimate promo_volume_estimate
+   - The model should use base_volume_snapshot as input and apply mathematical transformations based on entity multipliers/coefficients
+   - Estimated promo volumes should be populated in the promo_volume_estimate field during promotion creation
+
+2. INITIAL MODEL DESIGN - "Multiplier-Based Volume Estimation Model v1.0":
+   - Model Name: "VolumeMultiplierModel_v1.0"
+   - Model Type: Simple mathematical model using multipliers/coefficients
+   - Model Inputs:
+     * base_volume_snapshot (from Basevolume_allcombo_view)
+     * category_id (from Product_M.category_id)
+     * brand_id (from Product_M.brand_id)
+     * customer_id (from Customer_H)
+     * product_id (from Product_M)
+     * discount_pct (from promotion)
+   - Model Formula:
+     promo_volume_estimate = base_volume_snapshot * (
+       1 + category_multiplier + brand_multiplier + customer_multiplier + product_multiplier + discount_multiplier
+     )
+   - Where:
+     * category_multiplier = coefficient for the product's category
+     * brand_multiplier = coefficient for the product's brand
+     * customer_multiplier = coefficient for the customer
+     * product_multiplier = coefficient for the specific product
+     * discount_multiplier = coefficient based on discount_pct (can be a function of discount percentage)
+   - All multipliers can be positive (increasing volume) or negative (decreasing volume)
+
+3. MODEL VERSIONING:
+   - Models should be versioned (v1.0, v1.1, v2.0, etc.)
+   - Only one model version should be active at a time for production use
+   - Historical model versions should be preserved for audit and rollback purposes
+
+4. DATABASE STRUCTURE:
+   - Create ML_Model_Config table to store model metadata:
+     * model_id SERIAL PRIMARY KEY
+     * model_name VARCHAR(100) NOT NULL (e.g., "VolumeMultiplierModel_v1.0")
+     * model_version VARCHAR(50) NOT NULL (e.g., "1.0")
+     * model_type VARCHAR(50) NOT NULL (e.g., "multiplier_based", "neural_network", etc.)
+     * model_description TEXT
+     * is_active BOOLEAN DEFAULT false (only one should be active)
+     * created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+     * created_by VARCHAR(100)
+     * config_json JSONB (for storing model-specific configuration)
+   
+   - Create ML_Model_Coefficients table to store multipliers/coefficients:
+     * coefficient_id SERIAL PRIMARY KEY
+     * model_id INT REFERENCES ML_Model_Config(model_id)
+     * entity_type VARCHAR(50) NOT NULL (e.g., "category", "brand", "customer", "product", "discount_tier")
+     * entity_id INT (references Category_H.category_id, Brand_H.brand_id, Customer_H.customer_id, Product_M.product_id, or NULL for discount tiers)
+     * coefficient_value NUMERIC(10,4) NOT NULL (can be positive or negative)
+     * discount_min_pct NUMERIC(5,2) (optional, for discount_tier entity_type)
+     * discount_max_pct NUMERIC(5,2) (optional, for discount_tier entity_type)
+     * created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+     * UNIQUE(model_id, entity_type, entity_id, discount_min_pct, discount_max_pct)
+
+5. MODEL INITIALIZATION:
+   - For initial implementation (v1.0), use randomly generated coefficients:
+     * Category multipliers: Random between -0.2 and +0.3 (e.g., -20% to +30% impact)
+     * Brand multipliers: Random between -0.15 and +0.25 (e.g., -15% to +25% impact)
+     * Customer multipliers: Random between -0.1 and +0.2 (e.g., -10% to +20% impact)
+     * Product multipliers: Random between -0.05 and +0.15 (e.g., -5% to +15% impact)
+     * Discount multipliers: Based on discount tiers:
+       - 0-10% discount: Random between 0.05 and 0.15
+       - 11-25% discount: Random between 0.15 and 0.30
+       - 26-50% discount: Random between 0.30 and 0.50
+       - 51%+ discount: Random between 0.50 and 0.75
+   - Coefficients should be seeded for all existing categories, brands, customers, and products
+   - For entities that don't have specific coefficients, use a default value of 0
+
+6. MODEL EXECUTION:
+   - When createFactPromotion is called:
+     a) Retrieve the active ML model configuration
+     b) For each promotion record being created:
+        * Get base_volume_snapshot (already fetched)
+        * Get product_id, customer_id, discount_pct (already available)
+        * Fetch category_id and brand_id from Product_M using product_id
+        * Look up coefficients:
+          - category_multiplier: From ML_Model_Coefficients where entity_type='category' and entity_id=category_id
+          - brand_multiplier: From ML_Model_Coefficients where entity_type='brand' and entity_id=brand_id
+          - customer_multiplier: From ML_Model_Coefficients where entity_type='customer' and entity_id=customer_id
+          - product_multiplier: From ML_Model_Coefficients where entity_type='product' and entity_id=product_id
+          - discount_multiplier: From ML_Model_Coefficients where entity_type='discount_tier' and discount_pct falls within discount_min_pct and discount_max_pct
+        * Apply formula: promo_volume_estimate = base_volume_snapshot * (1 + sum of all multipliers)
+        * Ensure promo_volume_estimate is never negative (minimum 0)
+        * Store the calculated promo_volume_estimate in the record
+     c) Calculate incremental_volume, incremental_revenue, and incremental_margin using the estimated promo volumes
+
+7. SERVICE LAYER:
+   - Create/update ML service (mlService.ts) with:
+     * getActiveModel(): Get the currently active model configuration
+     * estimatePromoVolume(baseVolume, productId, customerId, categoryId, brandId, discountPct): Calculate estimated promo volume
+     * getCoefficient(modelId, entityType, entityId, discountPct): Get coefficient for a specific entity
+   - Service should handle cases where coefficients don't exist (return 0)
+
+8. INTEGRATION:
+   - Modify createFactPromotion in promotionsController.ts:
+     * After fetching base_volume_snapshot, call ML service to estimate promo_volume_estimate
+     * Use estimated volume instead of null
+     * Calculate incremental_volume, incremental_revenue, and incremental_margin with estimated volumes
+     * Store all calculated values in the database
+
+9. FUTURE ENHANCEMENTS (Out of Scope for v1.0):
+   - Model training using historical promotion data
+   - A/B testing between model versions
+   - Model performance metrics and monitoring
+   - Machine learning model types (neural networks, regression, etc.)
+   - Feature engineering (seasonality, time-based features, etc.)
+   - Model retraining and auto-update mechanisms
+
+10. ERROR HANDLING:
+    - If ML model is not available or fails, fall back to setting promo_volume_estimate to null (current behavior)
+    - Log errors for debugging but don't fail promotion creation
+    - If base_volume_snapshot is null, skip ML estimation (promo_volume_estimate remains null)
+
+11. LOGGING:
+    - Log model execution for each promotion creation
+    - Log which model version was used
+    - Log any missing coefficients (warnings)
+    - Log calculation results for auditing

@@ -1,0 +1,22 @@
+customer_id,customer_name,parent_customer_id
+1,All Customers,
+2,Tesco,1
+3,Asda,1
+4,Sainsbury,1
+5,Tesco Metro,2
+6,Tesco Extra,2
+7,Asda Superstore,3
+8,Sainsbury Local,4
+9,Sainsbury Superstore,4
+10,Metro Store 1,5
+11,Metro Store 2,5
+12,Extra Store 1,6
+13,Extra Store 2,6
+14,Extra Store 3,6
+15,Asda Store 1,7
+16,Asda Store 2,7
+17,Local Store 1,8
+18,Local Store 2,8
+19,Superstore 1,9
+20,Superstore 2,9
+21,Superstore 3,9

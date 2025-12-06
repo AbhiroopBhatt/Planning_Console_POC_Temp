@@ -1,0 +1,4 @@
+# Service management scripts (optional to track)
+# Uncomment if you want to ignore these scripts in git
+# restart-all.sh
+# stop-all.sh
